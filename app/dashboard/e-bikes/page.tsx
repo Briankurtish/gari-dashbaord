@@ -65,9 +65,17 @@ interface Bike {
   };
   images: BikeImage[];
   specifications: string;
-  features: string;
+  features: string | string[];
   created_at: string;
   updated_at: string;
+}
+
+interface Category {
+  id: number;
+  name: string;
+  description: string;
+  slug?: string;
+  is_active?: boolean;
 }
 
 const API_BASE_URL =
@@ -75,6 +83,7 @@ const API_BASE_URL =
 
 export default function EBikesPage() {
   const [bikes, setBikes] = useState<Bike[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBike, setSelectedBike] = useState<Bike | null>(null);
@@ -113,68 +122,20 @@ export default function EBikesPage() {
   const [newBikeImagePreviews, setNewBikeImagePreviews] = useState<string[]>(
     []
   );
-  const [selectedCurrency, setSelectedCurrency] = useState<"KES" | "XAF">(
-    "KES"
-  );
 
-  // Currency conversion rates (you might want to fetch these from an API)
-  const KES_TO_XAF_RATE = 1.5; // Example rate, replace with actual rate
-
-  // Convert KES to XAF
-  const kesToXaf = (kes: number) => Math.round(kes * KES_TO_XAF_RATE);
-
-  // Convert XAF to KES
-  const xafToKes = (xaf: number) => Math.round(xaf / KES_TO_XAF_RATE);
-
-  const formatCurrency = (amount: number, currency: "KES" | "XAF") => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  // Update the price input handlers
-  const handlePriceChange = (
-    value: string,
-    isKES: boolean,
-    setPrice: (price: number) => void
-  ) => {
-    const numericValue = value === "" ? 0 : parseInt(value);
-    // Always store in KES
-    setPrice(isKES ? numericValue : xafToKes(numericValue));
-  };
-
-  // Get the display value for the input field
-  const getDisplayPrice = (price: number, isKES: boolean) => {
-    if (!price) return "";
-    return isKES ? price.toString() : kesToXaf(price).toString();
-  };
-
-  // Get the formatted price for display in cards and dialogs
-  const getFormattedPrice = (price: number, isKES: boolean) => {
-    if (!price) return "";
-    return formatCurrency(
-      isKES ? price : kesToXaf(price),
-      isKES ? "KES" : "XAF"
+  // Format price in CFA (XAF)
+  const formatPrice = (amount: number) => {
+    return (
+      new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount) + " CFA"
     );
-  };
-
-  // Get the conversion display (shows the opposite currency)
-  const getConversionDisplay = (price: number, isKES: boolean) => {
-    if (!price) return "";
-    const oppositeAmount = isKES ? kesToXaf(price) : xafToKes(price);
-    const formattedAmount = new Intl.NumberFormat("en-US", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(oppositeAmount);
-
-    return isKES ? `${formattedAmount} XAF` : `KES ${formattedAmount}`;
   };
 
   useEffect(() => {
     fetchBikes();
+    fetchCategories();
   }, []);
 
   const getAuthHeaders = () => {
@@ -194,12 +155,39 @@ export default function EBikesPage() {
     return headers;
   };
 
+  const fetchCategories = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/v1/categories/`, {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data.results || data || []);
+      } else {
+        console.log(
+          "Categories endpoint not available, will use default categories"
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+    }
+  };
+
   const fetchBikes = async () => {
     try {
       setLoading(true);
       setError(null);
       const headers = getAuthHeaders();
-      if (!headers) return;
+      if (!headers.Authorization) return;
 
       const response = await fetch(`${API_BASE_URL}/api/v1/products/`, {
         method: "GET",
@@ -264,11 +252,16 @@ export default function EBikesPage() {
       formData.append("price", editingBike.price.toString());
       formData.append("category", editingBike.category);
       formData.append("stock_quantity", editingBike.stock_quantity.toString());
+      formData.append("specifications", editingBike.specifications || "");
+      const featuresValue = Array.isArray(editingBike.features)
+        ? editingBike.features.join(", ")
+        : editingBike.features || "";
+      formData.append("features", featuresValue);
 
       // Add new images
       newImages.forEach((file, index) => {
         formData.append("images", file);
-        if (index === 0) {
+        if (index === 0 && newImages.length > 0) {
           formData.append("is_primary", "true");
         }
       });
@@ -278,9 +271,9 @@ export default function EBikesPage() {
         formData.append("images_to_delete", id.toString());
       });
 
-      const authHeaders = getAuthHeaders();
+      const token = localStorage.getItem("token");
       const headers: HeadersInit = {
-        Authorization: authHeaders.Authorization || "",
+        Authorization: `Token ${token}`,
       };
 
       const response = await fetch(
@@ -344,11 +337,16 @@ export default function EBikesPage() {
       setIsLoading(true);
       setError(null);
 
+      const token = localStorage.getItem("token");
       const response = await fetch(
         `${API_BASE_URL}/api/v1/products/${selectedBike.id}/`,
         {
           method: "DELETE",
-          headers: getAuthHeaders(),
+          headers: {
+            Authorization: `Token ${token}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
         }
       );
 
@@ -379,7 +377,9 @@ export default function EBikesPage() {
     const matchesSearch = bike.name
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
-    return matchesSearch;
+    const matchesCategory =
+      selectedCategory === "all" || bike.category === selectedCategory;
+    return matchesSearch && matchesCategory;
   });
 
   const handlePreviousImage = () => {
@@ -431,10 +431,11 @@ export default function EBikesPage() {
         formData.append("images", file);
       });
 
+      const token = localStorage.getItem("token");
       const response = await fetch(`${API_BASE_URL}/api/v1/products/`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Token ${token}`,
         },
         body: formData,
       });
@@ -531,10 +532,7 @@ export default function EBikesPage() {
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-medium">Price:</span>
                         <span className="text-lg font-bold">
-                          {getFormattedPrice(
-                            bike.price,
-                            selectedCurrency === "KES"
-                          )}
+                          {formatPrice(bike.price)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
@@ -651,50 +649,22 @@ export default function EBikesPage() {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="price" className="text-right">
-                  Price
+                  Price (CFA)
                 </Label>
-                <div className="col-span-3 space-y-2">
-                  <div className="flex gap-2">
-                    <Input
-                      id="price"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={getDisplayPrice(
-                        editingBike.price,
-                        selectedCurrency === "KES"
-                      )}
-                      onChange={(e) =>
-                        handlePriceChange(
-                          e.target.value,
-                          selectedCurrency === "KES",
-                          (price) => setEditingBike({ ...editingBike, price })
-                        )
-                      }
-                      className="flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <Select
-                      value={selectedCurrency}
-                      onValueChange={(value: "KES" | "XAF") =>
-                        setSelectedCurrency(value)
-                      }
-                    >
-                      <SelectTrigger className="w-[100px]">
-                        <SelectValue placeholder="Currency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="KES">KES</SelectItem>
-                        <SelectItem value="XAF">XAF</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {getConversionDisplay(
-                      editingBike.price,
-                      selectedCurrency === "KES"
-                    )}
-                  </p>
-                </div>
+                <Input
+                  id="price"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={editingBike.price}
+                  onChange={(e) =>
+                    setEditingBike({
+                      ...editingBike,
+                      price: parseInt(e.target.value) || 0,
+                    })
+                  }
+                  className="col-span-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="category" className="text-right">
@@ -710,8 +680,18 @@ export default function EBikesPage() {
                     <SelectValue placeholder="Select a category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="electric">Electric</SelectItem>
-                    <SelectItem value="manual">Manual</SelectItem>
+                    {categories.length > 0 ? (
+                      categories.map((category) => (
+                        <SelectItem key={category.id} value={category.name}>
+                          {category.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="electric">Electric</SelectItem>
+                        <SelectItem value="manual">Manual</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -733,6 +713,41 @@ export default function EBikesPage() {
                     })
                   }
                   className="flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="specifications" className="text-right">
+                  Specifications
+                </Label>
+                <Textarea
+                  id="specifications"
+                  value={editingBike.specifications || ""}
+                  onChange={(e) =>
+                    setEditingBike({
+                      ...editingBike,
+                      specifications: e.target.value,
+                    })
+                  }
+                  className="col-span-3"
+                  placeholder="Enter bike specifications..."
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="features" className="text-right">
+                  Features
+                </Label>
+                <Textarea
+                  id="features"
+                  value={
+                    Array.isArray(editingBike.features)
+                      ? editingBike.features.join(", ")
+                      : editingBike.features || ""
+                  }
+                  onChange={(e) =>
+                    setEditingBike({ ...editingBike, features: e.target.value })
+                  }
+                  className="col-span-3"
+                  placeholder="Enter bike features..."
                 />
               </div>
 
@@ -972,10 +987,7 @@ export default function EBikesPage() {
                         Price
                       </h4>
                       <p className="text-xl font-bold">
-                        {getFormattedPrice(
-                          viewingBike.price,
-                          selectedCurrency === "KES"
-                        )}
+                        {formatPrice(viewingBike.price)}
                       </p>
                     </div>
                     <div>
@@ -1024,11 +1036,17 @@ export default function EBikesPage() {
                       Features
                     </h4>
                     <ul className="list-disc list-inside space-y-1">
-                      {viewingBike.features.map((feature, index) => (
-                        <li key={index} className="text-sm">
-                          {feature}
-                        </li>
-                      ))}
+                      {Array.isArray(viewingBike.features) ? (
+                        viewingBike.features.map(
+                          (feature: string, index: number) => (
+                            <li key={index} className="text-sm">
+                              {feature}
+                            </li>
+                          )
+                        )
+                      ) : (
+                        <li className="text-sm">{viewingBike.features}</li>
+                      )}
                     </ul>
                   </div>
                 )}
@@ -1093,50 +1111,22 @@ export default function EBikesPage() {
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="new-price" className="text-right">
-                Price
+                Price (CFA)
               </Label>
-              <div className="col-span-3 space-y-2">
-                <div className="flex gap-2">
-                  <Input
-                    id="new-price"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={getDisplayPrice(
-                      newBike.price,
-                      selectedCurrency === "KES"
-                    )}
-                    onChange={(e) =>
-                      handlePriceChange(
-                        e.target.value,
-                        selectedCurrency === "KES",
-                        (price) => setNewBike({ ...newBike, price })
-                      )
-                    }
-                    className="flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  <Select
-                    value={selectedCurrency}
-                    onValueChange={(value: "KES" | "XAF") =>
-                      setSelectedCurrency(value)
-                    }
-                  >
-                    <SelectTrigger className="w-[100px]">
-                      <SelectValue placeholder="Currency" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="KES">KES</SelectItem>
-                      <SelectItem value="XAF">XAF</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {getConversionDisplay(
-                    newBike.price,
-                    selectedCurrency === "KES"
-                  )}
-                </p>
-              </div>
+              <Input
+                id="new-price"
+                type="number"
+                min="0"
+                step="1"
+                value={newBike.price}
+                onChange={(e) =>
+                  setNewBike({
+                    ...newBike,
+                    price: parseInt(e.target.value) || 0,
+                  })
+                }
+                className="col-span-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="new-category" className="text-right">
@@ -1152,8 +1142,18 @@ export default function EBikesPage() {
                   <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="electric">Electric</SelectItem>
-                  <SelectItem value="manual">Manual</SelectItem>
+                  {categories.length > 0 ? (
+                    categories.map((category) => (
+                      <SelectItem key={category.id} value={category.name}>
+                        {category.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <>
+                      <SelectItem value="electric">Electric</SelectItem>
+                      <SelectItem value="manual">Manual</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -1175,6 +1175,34 @@ export default function EBikesPage() {
                   })
                 }
                 className="flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="new-specifications" className="text-right">
+                Specifications
+              </Label>
+              <Textarea
+                id="new-specifications"
+                value={newBike.specifications}
+                onChange={(e) =>
+                  setNewBike({ ...newBike, specifications: e.target.value })
+                }
+                className="col-span-3"
+                placeholder="Enter bike specifications..."
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="new-features" className="text-right">
+                Features
+              </Label>
+              <Textarea
+                id="new-features"
+                value={newBike.features}
+                onChange={(e) =>
+                  setNewBike({ ...newBike, features: e.target.value })
+                }
+                className="col-span-3"
+                placeholder="Enter bike features..."
               />
             </div>
 
