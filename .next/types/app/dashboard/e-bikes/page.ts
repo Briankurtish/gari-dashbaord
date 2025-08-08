@@ -1,4 +1,4 @@
-// File: C:\Users\Berka\Documents\GitHub\gari-dashbaord\app\dashboard\e-bikes\page.tsx
+// File: /home/anon/Documents/Github/gari-dashbaord/app/dashboard/e-bikes/page.tsx
 import * as entry from '../../../../../app/dashboard/e-bikes/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

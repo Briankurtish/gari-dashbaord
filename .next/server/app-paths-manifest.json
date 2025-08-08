@@ -1,3 +1,4 @@
 {
+  "/dashboard/page": "app/dashboard/page.js",
   "/dashboard/e-bikes/page": "app/dashboard/e-bikes/page.js"
 }

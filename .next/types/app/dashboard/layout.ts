@@ -1,4 +1,4 @@
-// File: C:\Users\Berka\Documents\GitHub\gari-dashbaord\app\dashboard\layout.tsx
+// File: /home/anon/Documents/Github/gari-dashbaord/app/dashboard/layout.tsx
 import * as entry from '../../../../app/dashboard/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
