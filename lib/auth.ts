@@ -86,7 +86,7 @@ class AuthService {
 
   getAuthHeader(): Record<string, string> {
     const token = this.getToken();
-    return token ? { Authorization: token } : {};
+    return token ? { Authorization: `Token ${token}` } : {};
   }
 
   getToken(): string | null {
@@ -111,7 +111,7 @@ class AuthService {
       };
 
       if (token) {
-        headers["Authorization"] = token;
+        headers["Authorization"] = `Token ${token}`;
       }
 
       const response = await fetch(url, {
